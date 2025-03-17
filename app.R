@@ -18,6 +18,7 @@ source("R/optimizer_module.R")
 source("R/db_module.R")
 source("R/free_resources_module.R")
 source("R/premium_resources_module.R")
+source("R/admin_module.R")
 
 # Initialize database
 db_pool <- init_db()
@@ -44,7 +45,8 @@ ui <- dashboardPage(
       menuItemOutput("menu_all_projections"),
       menuItemOutput("menu_my_collection"),
       menuItemOutput("menu_premium"),
-      menuItem("Account Management", tabName = "account", icon = icon("user-cog"))
+      menuItem("Account Management", tabName = "account", icon = icon("user-cog")),
+      menuItemOutput("menu_admin")
     )
   ),
   
@@ -121,7 +123,14 @@ ui <- dashboardPage(
       tabItem(tabName = "premium",
               h2("Premium Resources"),
               premiumResourcesUI("premium_resources")
+      ),
+
+      # Admin tab (new)
+      tabItem(tabName = "admin",
+              h2("Database Administration"),
+              adminUI("admin")
       )
+
     )
   )
 )
@@ -165,6 +174,13 @@ server <- function(input, output, session) {
     menuItem("Premium Resources", tabName = "premium", icon = icon("folder-open"))
   })
   
+  # Admin menu item - conditional based on admin status
+  output$menu_admin <- renderMenu({
+    # For now, always show it. Later you may want to check if the user is an admin
+    # Example: if(is_admin_user()) { ... }
+    menuItem("Admin", tabName = "admin", icon = icon("cogs"))
+  })
+
   # Account Management UI placeholder
   output$account_management_ui <- renderUI({
     fluidRow(
@@ -202,6 +218,9 @@ server <- function(input, output, session) {
   
   # Initialize premium resources module (renamed from additional resources)
   callModule(premiumResources, "premium_resources")
+
+  # Initialize admin module with database pool
+  callModule(admin, "admin", db_pool = db_pool)
 }
 
 # Run the application
