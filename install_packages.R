@@ -1,0 +1,19 @@
+# Required Packages
+install.packages(c(
+  'shiny',
+  'shinydashboard',
+  'shinyjs',
+  'DT',
+  'httr2',
+  'jsonlite',
+  'dplyr',
+  'tidyr',
+  'ggplot2',
+  'lubridate',
+  'pool',
+  'DBI',
+  'RSQLite',
+  'memoise',
+  'future',
+  'promises'
+))

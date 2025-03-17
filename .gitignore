@@ -1,0 +1,15 @@
+# R specific files
+.Rhistory
+.RData
+.Rproj.user/
+
+# Large package files
+*.deb
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp

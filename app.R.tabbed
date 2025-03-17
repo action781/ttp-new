@@ -1,0 +1,384 @@
+
+# Load configuration
+source("config.R")
+initialize_app()
+
+# Load required libraries
+library(shiny)
+library(shinydashboard)
+library(shinyjs)
+library(DT)
+library(dplyr)
+library(lpSolve)
+
+# Load module files
+source("R/projections_module.R")
+source("R/optimizer_module.R")
+source("R/auth_module.R")
+source("R/db_module.R")
+
+# Initialize database
+init_db()
+
+# UI Definition
+ui <- dashboardPage(
+  # Header
+  dashboardHeader(
+    title = "Top Tier Projections",
+    tags$li(
+      class = "dropdown",
+      style = "padding: 8px 20px; font-size: 16px;",
+      uiOutput("user_menu")
+    )
+  ),
+  
+  # Sidebar with menu
+  dashboardSidebar(
+    sidebarMenu(
+      id = "sidebar",
+      menuItem("Home", tabName = "home", icon = icon("house")),
+      menuItem("Free Resources", tabName = "free_resources", icon = icon("file-alt")),
+      menuItem("Account Management", tabName = "account", icon = icon("user-cog")),
+      # These will be conditionally shown based on subscription
+      menuItemOutput("menu_all_projections"),
+      menuItemOutput("menu_my_collection"),
+      menuItemOutput("menu_additional")
+    )
+  ),
+  
+  # Body content
+  dashboardBody(
+    # Use shinyjs for dynamic UI elements
+    useShinyjs(),
+    
+    # Include custom CSS
+    tags$head(
+      tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
+    ),
+    
+    # Tab content
+    tabItems(
+      # Home tab
+      tabItem(tabName = "home",
+              fluidRow(
+                column(12, 
+                  box(
+                    width = NULL,
+                    status = "primary",
+                    solidHeader = FALSE,
+                    h2("Welcome to Top Tier Projections"),
+                    p("Your source for fantasy basketball projections for Sorare NBA."),
+                    p("Top Tier Projections provides advanced statistical projections to help you win in Sorare NBA."),
+                    hr(),
+                    h3("Features:"),
+                    tags$ul(
+                      tags$li("Daily updated projections for all NBA players"),
+                      tags$li("Advanced lineup optimizer"),
+                      tags$li("Personalized lineup recommendations based on your collection")
+                    ),
+                    hr(),
+                    authUI("auth")
+                  )
+                )
+              )
+      ),
+      
+      # Free Resources tab
+      tabItem(tabName = "free_resources",
+              h2("Free Resources"),
+              p("Public content available to all users will appear here.")
+      ),
+      
+      # Account Management tab
+      tabItem(tabName = "account",
+              h2("Account Management"),
+              uiOutput("account_management_ui")
+      ),
+      
+      # All Projections tab (premium)
+      tabItem(tabName = "all_projections",
+              h2("All Projections"),
+              uiOutput("all_projections_content")
+      ),
+      
+      # My Collection tab (premium)
+      tabItem(tabName = "my_collection",
+              h2("My Collection"),
+              uiOutput("my_collection_content")
+      ),
+      
+      # Additional Resources tab (premium)
+      tabItem(tabName = "additional",
+              h2("Additional Resources"),
+              uiOutput("additional_content")
+      )
+    )
+  )
+)
+
+# Server logic
+server <- function(input, output, session) {
+  
+  # Initialize authentication module
+  auth_values <- callModule(auth, "auth")
+  
+  # User menu in header
+  output$user_menu <- renderUI({
+    if (auth_values$is_authenticated) {
+      div(
+        style = "color: white;",
+        paste0("Welcome, ", auth_values$sorare_username),
+        span(
+          style = "margin-left: 10px; font-size: 12px; padding: 2px 6px; background-color: #5cb85c; border-radius: 4px;",
+          auth_values$subscription_status
+        )
+      )
+    } else {
+      div(style = "color: white;", "Welcome, Guest")
+    }
+  })
+  
+  # Dynamic sidebar menu items
+  output$menu_all_projections <- renderMenu({
+    menuItem("All Projections", tabName = "all_projections", icon = icon("table"))
+  })
+  
+  output$menu_my_collection <- renderMenu({
+    if (auth_values$is_authenticated) {
+      menuItem("My Collection", tabName = "my_collection", icon = icon("chart-line"))
+    }
+  })
+  
+  output$menu_additional <- renderMenu({
+    if (has_premium_access(auth_values)) {
+      menuItem("Additional Resources", tabName = "additional", icon = icon("folder-open"))
+    }
+  })
+  
+  # All Projections content
+  output$all_projections_content <- renderUI({
+    fluidRow(
+      column(12, 
+        tabBox(
+          width = NULL,
+          tabPanel("Projections Data", projectionsUI("all_projections")),
+          tabPanel("Lineup Optimizer", optimizerUI("lineup_optimizer"))
+        )
+      )
+    )
+  })
+  
+  # My Collection content
+  output$my_collection_content <- renderUI({
+    if (!auth_values$is_authenticated) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Authentication Required"),
+            p("Please log in to access your collection."),
+            authUI("auth_my_collection")
+          )
+        )
+      )
+    } else if (!has_premium_access(auth_values)) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Premium Subscription Required"),
+            p("This feature is only available to premium subscribers."),
+            actionButton("upgrade_btn", "Upgrade Now", class = "btn-success")
+          )
+        )
+      )
+    } else {
+      # This will be replaced with actual My Collection UI later
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("My Collection"),
+            p("Your card collection will appear here.")
+          )
+        )
+      )
+    }
+  })
+  
+  # Account Management UI
+  output$account_management_ui <- renderUI({
+    if (!auth_values$is_authenticated) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Authentication Required"),
+            p("Please log in to manage your account."),
+            authUI("auth_account")
+          )
+        )
+      )
+    } else {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Account Management"),
+            h4("Subscription Status"),
+            p(paste0("Current plan: ", auth_values$subscription_status)),
+            if (auth_values$subscription_status == "free") {
+              div(
+                h4("Upgrade to Premium"),
+                p("Get access to all features including My Collection and Advanced Tools."),
+                actionButton("upgrade_btn", "Upgrade Now", class = "btn-success")
+              )
+            } else {
+              div(
+                h4("Manage Subscription"),
+                p("You currently have a premium subscription."),
+                actionButton("manage_sub_btn", "Manage Subscription", class = "btn-info")
+              )
+            }
+          )
+        )
+      )
+    }
+  })
+  
+  # Additional content
+  output$additional_content <- renderUI({
+    if (!auth_values$is_authenticated) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Authentication Required"),
+            p("Please log in to access additional resources."),
+            authUI("auth_additional")
+          )
+        )
+      )
+    } else if (!has_premium_access(auth_values)) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Premium Subscription Required"),
+            p("This feature is only available to premium subscribers."),
+            actionButton("upgrade_btn", "Upgrade Now", class = "btn-success")
+          )
+        )
+      )
+    } else {
+      # This will be replaced with actual Additional Resources UI later
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Additional Resources"),
+            p("Premium tools and resources will appear here.")
+          )
+        )
+      )
+    }
+  })
+  
+  # Initialize projections module
+  projections_data <- callModule(projections, "all_projections")
+  
+  # Initialize optimizer module with projections data
+  callModule(optimizer, "lineup_optimizer", projections_data = projections_data$data)
+  
+  # Secondary auth modules on other pages
+  callModule(auth, "auth_my_collection")
+  callModule(auth, "auth_account")
+  callModule(auth, "auth_additional")
+  
+  # Handle upgrade button
+  observeEvent(input$upgrade_btn, {
+    showModal(modalDialog(
+      title = "Upgrade to Premium",
+      p("This will be replaced with Stripe integration for subscription management."),
+      p("For now, we'll simulate upgrading your account."),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("confirm_upgrade", "Upgrade", class = "btn-success")
+      )
+    ))
+  })
+  
+  # Handle upgrade confirmation
+  observeEvent(input$confirm_upgrade, {
+    # This is for simulation only - in production, this would connect to Stripe
+    if (auth_values$is_authenticated) {
+      # Update the subscription status
+      auth_values$subscription_status <- "premium"
+      
+      # Update in database
+      con <- dbConnect(RSQLite::SQLite(), "/srv/shiny-server/ttp/data/toptierprojections.db")
+      
+      # Get user ID
+      user_id <- auth_values$user_data$id
+      
+      # Update any existing subscription to inactive
+      dbExecute(con, paste0("UPDATE subscriptions SET status = 'inactive' WHERE user_id = ", user_id))
+      
+      # Create new premium subscription
+      dbExecute(con, paste0(
+        "INSERT INTO subscriptions (user_id, status, plan_type, start_date, end_date) VALUES (",
+        user_id, ", 'active', 'premium', datetime('now'), datetime('now', '+1 year'))"
+      ))
+      
+      dbDisconnect(con)
+      
+      # Close the modal
+      removeModal()
+      
+      # Show success notification
+      showNotification("You have been upgraded to premium!", type = "message")
+    }
+  })
+  
+  # Handle subscription management
+  observeEvent(input$manage_sub_btn, {
+    showModal(modalDialog(
+      title = "Manage Subscription",
+      p("This will be replaced with Stripe's customer portal integration."),
+      p("For now, we'll simulate canceling your subscription."),
+      footer = tagList(
+        modalButton("Close"),
+        actionButton("cancel_sub_btn", "Cancel Subscription", class = "btn-danger")
+      )
+    ))
+  })
+  
+  # Handle subscription cancellation
+  observeEvent(input$cancel_sub_btn, {
+    # This is for simulation only - in production, this would connect to Stripe
+    if (auth_values$is_authenticated) {
+      # Update the subscription status
+      auth_values$subscription_status <- "free"
+      
+      # Update in database
+      con <- dbConnect(RSQLite::SQLite(), "/srv/shiny-server/ttp/data/toptierprojections.db")
+      
+      # Get user ID
+      user_id <- auth_values$user_data$id
+      
+      # Update all subscriptions to inactive
+      dbExecute(con, paste0("UPDATE subscriptions SET status = 'inactive' WHERE user_id = ", user_id))
+      
+      dbDisconnect(con)
+      
+      # Close the modal
+      removeModal()
+      
+      # Show notification
+      showNotification("Your subscription has been canceled.", type = "message")
+    }
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server) 
