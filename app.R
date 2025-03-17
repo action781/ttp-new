@@ -16,6 +16,8 @@ library(lpSolve)
 source("R/projections_module.R")
 source("R/optimizer_module.R")
 source("R/db_module.R")
+source("R/free_resources_module.R")
+source("R/premium_resources_module.R")
 
 # Initialize database
 db_pool <- init_db()
@@ -32,17 +34,17 @@ ui <- dashboardPage(
     )
   ),
   
-  # Sidebar with menu
+  # Sidebar with menu - reordered and renamed
   dashboardSidebar(
     sidebarMenu(
       id = "sidebar",
       menuItem("Home", tabName = "home", icon = icon("house")),
       menuItem("Free Resources", tabName = "free_resources", icon = icon("file-alt")),
-      menuItem("Account Management", tabName = "account", icon = icon("user-cog")),
       # These will be conditionally shown based on subscription
       menuItemOutput("menu_all_projections"),
       menuItemOutput("menu_my_collection"),
-      menuItemOutput("menu_additional")
+      menuItemOutput("menu_premium"),
+      menuItem("Account Management", tabName = "account", icon = icon("user-cog"))
     )
   ),
   
@@ -86,7 +88,7 @@ ui <- dashboardPage(
       # Free Resources tab
       tabItem(tabName = "free_resources",
               h2("Free Resources"),
-              p("Public content available to all users will appear here.")
+              freeResourcesUI("free_resources")
       ),
       
       # Account Management tab
@@ -115,10 +117,10 @@ ui <- dashboardPage(
               uiOutput("my_collection_content")
       ),
       
-      # Additional Resources tab (premium)
-      tabItem(tabName = "additional",
-              h2("Additional Resources"),
-              uiOutput("additional_content")
+      # Premium Resources tab (renamed from Additional Resources)
+      tabItem(tabName = "premium",
+              h2("Premium Resources"),
+              premiumResourcesUI("premium_resources")
       )
     )
   )
@@ -127,25 +129,21 @@ ui <- dashboardPage(
 # Server logic
 server <- function(input, output, session) {
   
-  # Initialize auth module - keep this at the top
-  auth_values <- callModule(auth, "auth")
-  
-  # OAuth callback handler - keep this
-  observe({
-    query <- parseQueryString(session$clientData$url_search)
-    # Check if this is a callback with authorization code
-    if (!is.null(query$code)) {
-      # Process the OAuth callback
-      auth_values$process_oauth_callback(query$code)
-      # Redirect to main page without query parameters
-      updateQueryString("/", mode = "replace")
-    }
+  # User authentication UI (simplified for now)
+  output$auth_ui <- renderUI({
+    actionButton("login_btn", "Log In with Sorare NBA", 
+               icon = icon("sign-in-alt"), 
+               class = "btn-primary btn-lg")
   })
   
-  # REPLACE the old auth_ui and placeholder login button sections
-  # User authentication UI - now use the auth module's UI
-  output$auth_ui <- renderUI({
-    authUI("auth")
+  # Placeholder for login button action
+  observeEvent(input$login_btn, {
+    showModal(modalDialog(
+      title = "Login Feature",
+      "OAuth integration with Sorare NBA will be implemented here.",
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
   })
   
   # User menu in header
@@ -162,8 +160,9 @@ server <- function(input, output, session) {
     menuItem("My Collection", tabName = "my_collection", icon = icon("chart-line"))
   })
   
-  output$menu_additional <- renderMenu({
-    menuItem("Additional Resources", tabName = "additional", icon = icon("folder-open"))
+  # Renamed from menu_additional to menu_premium
+  output$menu_premium <- renderMenu({
+    menuItem("Premium Resources", tabName = "premium", icon = icon("folder-open"))
   })
   
   # Account Management UI placeholder
@@ -192,24 +191,17 @@ server <- function(input, output, session) {
     )
   })
   
-  # Additional content placeholder
-  output$additional_content <- renderUI({
-    fluidRow(
-      column(12,
-        box(
-          width = NULL,
-          h3("Additional Resources"),
-          p("Premium tools and resources will appear here.")
-        )
-      )
-    )
-  })
-  
   # Initialize projections module
   projections_data <- callModule(projections, "all_projections")
   
   # Initialize optimizer module with projections data
   callModule(optimizer, "lineup_optimizer", projections_data = projections_data$data)
+  
+  # Initialize free resources module
+  callModule(freeResources, "free_resources")
+  
+  # Initialize premium resources module (renamed from additional resources)
+  callModule(premiumResources, "premium_resources")
 }
 
 # Run the application
