@@ -4,6 +4,7 @@
 source("config.R")
 initialize_app()
 
+library(memoise)
 # Load required libraries
 library(shiny)
 library(shinydashboard)
@@ -19,6 +20,8 @@ source("R/db_module.R")
 source("R/free_resources_module.R")
 source("R/premium_resources_module.R")
 source("R/admin_module.R")
+source("R/mock_auth_module.R")       # Added mock auth module for testing
+source("R/my_collection_module.R")   # Added my collection module
 
 # Initialize database
 db_pool <- init_db()
@@ -35,7 +38,7 @@ ui <- dashboardPage(
     )
   ),
   
-  # Sidebar with menu - reordered and renamed
+  # Sidebar with menu
   dashboardSidebar(
     sidebarMenu(
       id = "sidebar",
@@ -81,7 +84,8 @@ ui <- dashboardPage(
                       tags$li("Personalized lineup recommendations based on your collection")
                     ),
                     hr(),
-                    uiOutput("auth_ui")
+                    # Replace auth_ui with mock auth UI for testing
+                    mockAuthUI("auth")
                   )
                 )
               )
@@ -113,24 +117,23 @@ ui <- dashboardPage(
               )
       ),
       
-      # My Collection tab (premium)
+      # My Collection tab (premium) - Only including the projections data tab for now
       tabItem(tabName = "my_collection",
               h2("My Collection"),
               uiOutput("my_collection_content")
       ),
       
-      # Premium Resources tab (renamed from Additional Resources)
+      # Premium Resources tab
       tabItem(tabName = "premium",
               h2("Premium Resources"),
               premiumResourcesUI("premium_resources")
       ),
 
-      # Admin tab (new)
+      # Admin tab
       tabItem(tabName = "admin",
               h2("Database Administration"),
               adminUI("admin")
       )
-
     )
   )
 )
@@ -138,26 +141,23 @@ ui <- dashboardPage(
 # Server logic
 server <- function(input, output, session) {
   
-  # User authentication UI (simplified for now)
-  output$auth_ui <- renderUI({
-    actionButton("login_btn", "Log In with Sorare NBA", 
-               icon = icon("sign-in-alt"), 
-               class = "btn-primary btn-lg")
-  })
-  
-  # Placeholder for login button action
-  observeEvent(input$login_btn, {
-    showModal(modalDialog(
-      title = "Login Feature",
-      "OAuth integration with Sorare NBA will be implemented here.",
-      easyClose = TRUE,
-      footer = modalButton("Close")
-    ))
-  })
+  # Initialize mock auth module
+  auth_values <- callModule(mockAuth, "auth")
   
   # User menu in header
   output$user_menu <- renderUI({
-    div(style = "color: white;", "Welcome, Guest")
+    if (auth_values$is_authenticated) {
+      div(
+        style = "color: white;",
+        paste0("Welcome, ", auth_values$sorare_username),
+        span(
+          style = "margin-left: 10px; font-size: 12px; padding: 2px 6px; background-color: #5cb85c; border-radius: 4px;",
+          auth_values$subscription_status
+        )
+      )
+    } else {
+      div(style = "color: white;", "Welcome, Guest")
+    }
   })
   
   # Dynamic sidebar menu items
@@ -166,18 +166,19 @@ server <- function(input, output, session) {
   })
   
   output$menu_my_collection <- renderMenu({
-    menuItem("My Collection", tabName = "my_collection", icon = icon("chart-line"))
+    if (auth_values$is_authenticated) {
+      menuItem("My Collection", tabName = "my_collection", icon = icon("chart-line"))
+    }
   })
   
-  # Renamed from menu_additional to menu_premium
   output$menu_premium <- renderMenu({
-    menuItem("Premium Resources", tabName = "premium", icon = icon("folder-open"))
+    if (has_premium_access(auth_values)) {
+      menuItem("Premium Resources", tabName = "premium", icon = icon("folder-open"))
+    }
   })
   
-  # Admin menu item - conditional based on admin status
   output$menu_admin <- renderMenu({
-    # For now, always show it. Later you may want to check if the user is an admin
-    # Example: if(is_admin_user()) { ... }
+    # For now, always show admin menu
     menuItem("Admin", tabName = "admin", icon = icon("cogs"))
   })
 
@@ -194,17 +195,34 @@ server <- function(input, output, session) {
     )
   })
   
-  # My Collection content placeholder
+  # My Collection content
   output$my_collection_content <- renderUI({
-    fluidRow(
-      column(12,
-        box(
-          width = NULL,
-          h3("My Collection"),
-          p("This feature will display personalized projections based on your Sorare NBA card collection.")
+    if (!auth_values$is_authenticated) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Authentication Required"),
+            p("Please log in to view your collection."),
+            mockAuthUI("auth_collection")
+          )
         )
       )
-    )
+    } else if (!has_premium_access(auth_values)) {
+      fluidRow(
+        column(12,
+          box(
+            width = NULL,
+            h3("Premium Subscription Required"),
+            p("Access to your collection with projections requires a premium subscription."),
+            actionButton("upgrade_btn", "Upgrade Now", class = "btn-success")
+          )
+        )
+      )
+    } else {
+      # Show the My Collection module UI (just the projections data tab for now)
+      myCollectionUI("user_collection")
+    }
   })
   
   # Initialize projections module
@@ -216,11 +234,20 @@ server <- function(input, output, session) {
   # Initialize free resources module
   callModule(freeResources, "free_resources")
   
-  # Initialize premium resources module (renamed from additional resources)
+  # Initialize premium resources module
   callModule(premiumResources, "premium_resources")
 
   # Initialize admin module with database pool
   callModule(admin, "admin", db_pool = db_pool)
+  
+  # Initialize auth module for collection page
+  auth_collection_values <- callModule(mockAuth, "auth_collection")
+  
+  # Initialize my collection module - only if authenticated
+  observe({
+    req(auth_values$is_authenticated)
+    callModule(myCollection, "user_collection", auth_values, projections_data$data)
+  })
 }
 
 # Run the application
