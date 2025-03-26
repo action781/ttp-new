@@ -1,6 +1,12 @@
+# Environment variables and sensitive data
+.env
+*.env
+.Renviron
+
 # R specific files
+*.rds
 .Rhistory
-.RData
+*.RData
 .Rproj.user/
 
 # Large package files
@@ -13,3 +19,7 @@ Thumbs.db
 # Temporary files
 *.log
 *.tmp
+
+# Database files
+*.db
+*.sqlite

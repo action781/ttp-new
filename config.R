@@ -10,11 +10,11 @@ DB_TYPE <- "sqlite"  # Change to "postgres" later if needed
 DB_PATH <- "/srv/shiny-server/ttp/data/toptierprojections.db"
 
 # API configuration
-# These would be stored as environment variables in production
 SORARE_API_URL <- "https://api.sorare.com/graphql"
-SORARE_CLIENT_ID <- "YOUR_CLIENT_ID"  # Replace with actual values later
-SORARE_CLIENT_SECRET <- "YOUR_CLIENT_SECRET"  # Replace with actual values later
-SORARE_REDIRECT_URI <- "http://34.30.34.27:3838/ttp/oauth/callback"  # Update with your actual domain
+SORARE_API_KEY <- Sys.getenv("SORARE_API_KEY")
+SORARE_CLIENT_ID <- Sys.getenv("SORARE_CLIENT_ID")
+SORARE_CLIENT_SECRET <- Sys.getenv("SORARE_CLIENT_SECRET")
+SORARE_REDIRECT_URI <- Sys.getenv("SORARE_REDIRECT_URI")
 
 # Stripe configuration
 STRIPE_PUBLIC_KEY <- "YOUR_STRIPE_PUBLIC_KEY"  # Replace with actual values later

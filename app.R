@@ -1,6 +1,9 @@
 # app.R - Main Shiny application file
 
 # Load configuration
+library(dotenv)
+dotenv::load_dot_env()
+
 source("config.R")
 initialize_app()
 

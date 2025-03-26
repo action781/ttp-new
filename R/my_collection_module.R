@@ -121,7 +121,7 @@ myCollection <- function(input, output, session, auth_values, projections_data) 
   )
   
   # Sorare API Key
-  sorare_api_key <- "515be61b0aac9d16fbfc810d29a4990acd8f17ef1b19dc86a114692e2a05a3602adb96e1805ff0aa715c3a05e7bd0a8486b123276ed2997e1f15ac54c56sr128"
+  sorare_api_key <- Sys.getenv("SORARE_API_KEY")
   
   # Create a cache for API calls with 30-minute expiry
   # Set the cache timeout to 30 minutes (1800 seconds)
